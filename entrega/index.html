@@ -10,7 +10,6 @@
 
 <script>
   window.META_PIXEL_ID = "2780957048709348";
-  window.CHECKOUT_URL  = "https://mysecret-dun.vercel.app/";
   window.PRICE_MAIN    = 47.90;
   window.PRICE_BUMP    = 19.90;
 </script>
@@ -663,7 +662,7 @@ fbq('track', 'PageView');
 
 <div class="loading" id="loading">
   <div class="loading-spinner"></div>
-  <div class="loading-text">Gerando seu PIX seguro...</div>
+  <div class="loading-text">Indo para o pagamento PIX...</div>
 </div>
 
 <script>
@@ -729,10 +728,27 @@ fbq('track', 'PageView');
 
   function saveDraft(){
     try {
+      // Captura UTMs e fbclid da URL atual (passados pela presell)
+      var urlParams = new URLSearchParams(window.location.search);
+      var utms = {};
+      ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','fbclid'].forEach(function(k){
+        var v = urlParams.get(k);
+        if (v) utms[k] = v;
+      });
+      // Mescla com UTMs já salvos (atribuição first-touch)
+      try {
+        var existing = JSON.parse(localStorage.getItem('mysecret_utms') || '{}');
+        Object.keys(existing).forEach(function(k){ if (!utms[k]) utms[k] = existing[k]; });
+      } catch(e) {}
+      localStorage.setItem('mysecret_utms', JSON.stringify(utms));
+
       localStorage.setItem('mysecret_checkout', JSON.stringify({
-        nome: nomeInput.value, email: emailInput.value,
-        cpf: cpfInput.value, telefone: telefoneInput.value,
-        bump: bumpInput.checked
+        nome: nomeInput.value,
+        email: emailInput.value,
+        cpf: cpfInput.value,
+        telefone: telefoneInput.value,
+        bump: bumpInput.checked,
+        total: bumpInput.checked ? (window.PRICE_MAIN + window.PRICE_BUMP) : window.PRICE_MAIN
       }));
     } catch(e){}
   }
@@ -801,26 +817,15 @@ fbq('track', 'PageView');
     return valid;
   }
 
-  function buildCheckoutUrl(){
+  function buildPixUrl(){
     try {
       var current = new URL(window.location.href);
-      var dest = new URL(window.CHECKOUT_URL);
+      var dest = new URL('../pix/', window.location.href);
       current.searchParams.forEach(function(value, key){
         if (!dest.searchParams.has(key)) dest.searchParams.set(key, value);
       });
-      dest.searchParams.set('nome', nomeInput.value.trim());
-      dest.searchParams.set('email', emailInput.value.trim());
-      dest.searchParams.set('cpf', cpfInput.value.replace(/\D/g, ''));
-      dest.searchParams.set('telefone', telefoneInput.value.replace(/\D/g, ''));
-      if (bumpInput.checked) {
-        dest.searchParams.set('bump', '1');
-        dest.searchParams.set('bump_value', window.PRICE_BUMP.toFixed(2));
-        dest.searchParams.set('total', (window.PRICE_MAIN + window.PRICE_BUMP).toFixed(2));
-      } else {
-        dest.searchParams.set('total', window.PRICE_MAIN.toFixed(2));
-      }
       return dest.toString();
-    } catch(e){ return window.CHECKOUT_URL; }
+    } catch(e){ return '../pix/'; }
   }
 
   // ============================================================
@@ -833,7 +838,7 @@ fbq('track', 'PageView');
     var total = window.PRICE_MAIN + (bumpInput.checked ? window.PRICE_BUMP : 0);
     try {
       if (window.fbq) {
-        fbq('track', 'AddPaymentInfo', {
+        fbq('track', 'InitiateCheckout', {
           content_name: 'My Secret 2 em 1' + (bumpInput.checked ? ' + K-Med' : ''),
           content_category: 'wellness',
           value: total, currency: 'BRL',
@@ -841,9 +846,10 @@ fbq('track', 'PageView');
         });
       }
     } catch(e){}
+    saveDraft();
     submitBtn.disabled = true;
     loading.classList.add('show');
-    setTimeout(function(){ window.location.href = buildCheckoutUrl(); }, 600);
+    setTimeout(function(){ window.location.href = buildPixUrl(); }, 400);
   });
 
   (function(){
